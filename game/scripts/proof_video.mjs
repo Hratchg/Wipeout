@@ -87,7 +87,7 @@ const outcome = await page.evaluate(async () => {
 
   // Deliberate sweeper wipeout for the cameras
   await act("left");
-  await until(() => !hz.sweeper.isDangerAtLane(0));
+  await until(() => !hz.sweeper.hitsPlayer(-2.4, 14 * 2.4));
   await act("forward", 0); // stand on row 14 and take the hit
   await until(() => player.motion === "tumble", 6000);
   sweeperWipeout = player.motion === "tumble";
@@ -96,8 +96,8 @@ const outcome = await page.evaluate(async () => {
 
   // Cross the sweeper properly this time
   await act("left");
-  await until(() => hz.sweeper.isDangerAtLane(0));
-  await until(() => !hz.sweeper.isDangerAtLane(0));
+  await until(() => hz.sweeper.hitsPlayer(-2.4, 14 * 2.4));
+  await until(() => !hz.sweeper.hitsPlayer(-2.4, 14 * 2.4));
   await act("forward", 0);
   await act("forward"); // row 15
   await act("right"); // lane 1: safe from both pistons

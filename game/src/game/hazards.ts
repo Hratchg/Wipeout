@@ -6,19 +6,17 @@ import {
   TransformNode,
   Vector3,
 } from "@babylonjs/core";
+import {
+  circleHitsAabb2D,
+  PLAYER_HIT_RADIUS,
+  sweeperHitsPlayer,
+} from "./collision";
 import { LANE_W, laneX, rowZ, WATER_Y } from "./course";
 import type { ArenaAssets } from "./arenaAssets";
 import {
   inflatableMaterial,
   tuneGeneratedAssetMaterials,
 } from "./materials";
-
-function angularDist(a: number, b: number): number {
-  const TWO_PI = Math.PI * 2;
-  let d = Math.abs(a - b) % TWO_PI;
-  if (d > Math.PI) d = TWO_PI - d;
-  return d;
-}
 
 function centerGeneratedAt(root: TransformNode, target: Vector3): void {
   root.computeWorldMatrix(true);
@@ -133,15 +131,18 @@ export class BigBalls {
 /** Rotating sweeper arm around a hub pillar on the middle lane. */
 export class Sweeper {
   private static readonly SPEED = 1.5; // rad/s
-  private static readonly HIT_WIDTH = 0.32; // rad
   private static readonly ARM_Y = 0.45;
+  private static readonly ARM_HALF_WIDTH = (LANE_W * 2 + 2.4) / 2;
+  private static readonly ARM_HALF_DEPTH = 0.45;
 
   private root: TransformNode;
+  private hubZ: number;
   private angle = 0;
 
   constructor(scene: Scene, row: number, assets: ArenaAssets) {
+    this.hubZ = rowZ(row);
     this.root = new TransformNode("sweeper-root", scene);
-    this.root.position = new Vector3(0, Sweeper.ARM_Y, rowZ(row));
+    this.root.position = new Vector3(0, Sweeper.ARM_Y, this.hubZ);
 
     const hubMat = inflatableMaterial(
       scene,
@@ -225,20 +226,23 @@ export class Sweeper {
     this.root.rotation.y = this.angle;
   }
 
-  /**
-   * The arm spans the full diameter, so it points at `angle` and `angle + PI`.
-   * A side lane is hit when either end sweeps past that lane's bearing.
-   * With root Y-rotation, the arm's +X end points at world direction
-   * (cos(-angle), sin(-angle)) in the XZ plane -> bearing atan2(x, z).
-   */
-  isDangerAtLane(lane: number): boolean {
-    if (lane === 1) return false; // hub pillar: not enterable anyway
-    const playerBearing = lane === 0 ? -Math.PI / 2 : Math.PI / 2;
-    const armBearing = Math.atan2(Math.cos(this.angle), Math.sin(this.angle));
-    return (
-      angularDist(armBearing, playerBearing) < Sweeper.HIT_WIDTH ||
-      angularDist(armBearing + Math.PI, playerBearing) < Sweeper.HIT_WIDTH
+  /** True when the physical arm volume overlaps the player in XZ. */
+  hitsPlayer(px: number, pz: number, radius = PLAYER_HIT_RADIUS): boolean {
+    return sweeperHitsPlayer(
+      this.angle,
+      Sweeper.ARM_HALF_WIDTH,
+      Sweeper.ARM_HALF_DEPTH,
+      this.hubZ,
+      px,
+      pz,
+      radius,
     );
+  }
+
+  knockDirection(px: number, pz: number): Vector3 {
+    const dir = new Vector3(px, 0, pz - this.hubZ);
+    if (dir.lengthSquared() < 0.01) return new Vector3(1, 0, 0.2);
+    return dir;
   }
 }
 
@@ -335,9 +339,31 @@ export class PistonRow {
     }
   }
 
-  /** 0..1 — how far the piston covering this lane is extended. */
-  extension(lane: number): number {
-    return this.extensions[lane] ?? 0;
+  /** True when a protruding pad overlaps the player, including center lane. */
+  hitsPlayer(px: number, pz: number, radius = PLAYER_HIT_RADIUS): boolean {
+    for (const pad of Object.values(this.pads)) {
+      if (!pad) continue;
+      pad.computeWorldMatrix(true);
+      const bounds = pad.getHierarchyBoundingVectors(true);
+      if (
+        circleHitsAabb2D(
+          px,
+          pz,
+          radius,
+          bounds.min.x,
+          bounds.max.x,
+          bounds.min.z,
+          bounds.max.z,
+        )
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  knockDirection(px: number): Vector3 {
+    return new Vector3(px === 0 ? 1 : -Math.sign(px), 0, 0.2);
   }
 }
 

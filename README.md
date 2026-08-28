@@ -64,6 +64,9 @@ for a TV driven by a mini-PC. Three ways to play, all interchangeable:
 # Game (dev)
 cd game && npm install && npm run dev        # http://localhost:5173
 
+# Production web build (static files in game/dist)
+cd game && npm run build && npm run preview  # http://localhost:4173
+
 # Input service (camera mode)
 cd input-service
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
@@ -77,7 +80,8 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 On a Linux mini-PC, install the systemd units in `deploy/` and add
 `start_tv.sh` (or just the Chrome kiosk line) to the desktop autostart.
 
-Controls: arrows = move, Enter/Space = jump, F2 = remote button setup.
+Controls: arrows = move, double-tap up = jump,
+Space = jump, F2 = remote button setup. Enter still confirms menus.
 In the menu, toggle VOICE and CAMERA on, then START GAME. Voice needs mic
 permission the first time; camera mode needs the input service running.
 

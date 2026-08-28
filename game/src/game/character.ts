@@ -158,8 +158,9 @@ async function loadPerClipFiles(
   };
 
   idle.node.setEnabled(true);
-  // Tripo3D exports face -Z; verify and adjust when those assets land.
-  normalizeAndAttach(root, idle.node, player, shadows, animator, Math.PI);
+  // glTF __root__ already applies 180° Y. The Tripo rest pose then faces +X
+  // (screen right). +90° turns that into +Z, down the course.
+  normalizeAndAttach(root, idle.node, player, shadows, animator, Math.PI / 2);
   idle.node.setEnabled(true);
   animator.play("idle");
   return true;

@@ -105,15 +105,26 @@ export class Player {
     return this.motion === "tween" || this.motion === "tumble" || this.motion === "fall" || this.motion === "gone";
   }
 
+  /** Grounded or taking a short step — leaps stay above the rotating arms. */
+  get isExposedToHazards(): boolean {
+    return (
+      this.motion === "idle" ||
+      this.motion === "riding" ||
+      (this.motion === "tween" && this.tween?.kind === "step")
+    );
+  }
+
   moveTo(lane: number, row: number, kind: MoveKind): void {
     const params = MOVE_PARAMS[kind];
+    const span = Math.abs(row - this.row);
+    const longLeap = kind === "leap" && span > 2;
     this.resetVisualPose();
     this.tween = {
       from: this.root.position.clone(),
       to: new Vector3(laneX(lane), 0, rowZ(row)),
-      duration: params.duration,
+      duration: longLeap ? 0.7 : params.duration,
       elapsed: 0,
-      hop: params.hop,
+      hop: longLeap ? 2.1 : params.hop,
       kind,
       targetLane: lane,
       targetRow: row,

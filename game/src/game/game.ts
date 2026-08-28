@@ -1,6 +1,6 @@
 import { FreeCamera, Scene, Vector3 } from "@babylonjs/core";
 import type { Action, GameState } from "../types";
-import { COURSE, FINISH_ROW, LANE_W, laneX } from "./course";
+import { COURSE, FINISH_ROW, LANE_W, laneX, leapLandingRow } from "./course";
 import type { BuiltWorld } from "./builder";
 import { Player } from "./player";
 import { EffectsController } from "./effects";
@@ -139,7 +139,10 @@ export class Game {
       );
       if (action === "forward") this.tryMove(nearestLane, p.row + 1, "step");
       else if (action === "back") this.tryMove(nearestLane, p.row - 1, "step");
-      else if (action === "jump") this.tryMove(nearestLane, p.row + 2, "leap");
+      else if (action === "jump") {
+        const dest = leapLandingRow(nearestLane, p.row);
+        if (dest !== null) this.tryMove(nearestLane, dest, "leap");
+      }
       return;
     }
 
@@ -158,9 +161,11 @@ export class Game {
       case "back":
         this.tryMove(p.lane, p.row - 1, "step");
         break;
-      case "jump":
-        this.tryMove(p.lane, p.row + 2, "leap");
+      case "jump": {
+        const dest = leapLandingRow(p.lane, p.row);
+        if (dest !== null) this.tryMove(p.lane, dest, "leap");
         break;
+      }
     }
   }
 
@@ -288,17 +293,14 @@ export class Game {
         p.root.position.x = hz.platform.currentX();
       }
 
-      // Hazard hits only apply while grounded and not invulnerable.
-      if (p.motion === "idle" && this.time > this.invulnUntil) {
-        if (p.row === hz.sweeperRow && hz.sweeper.isDangerAtLane(p.lane)) {
-          const outward = p.lane === 0 ? -1 : 1;
-          this.wipeout(new Vector3(outward, 0, 0.3));
-        } else if (
-          p.row === hz.pistonRow &&
-          hz.pistons.extension(p.lane) > 0.5
-        ) {
-          const push = p.lane === 0 ? 1 : -1;
-          this.wipeout(new Vector3(push * 1.2, 0, 0.2));
+      // Hazard hits use the real arm/pad volume, not just the side-lane edges.
+      if (p.isExposedToHazards && this.time > this.invulnUntil) {
+        const px = p.root.position.x;
+        const pz = p.root.position.z;
+        if (hz.sweeper.hitsPlayer(px, pz)) {
+          this.wipeout(hz.sweeper.knockDirection(px, pz));
+        } else if (hz.pistons.hitsPlayer(px, pz)) {
+          this.wipeout(hz.pistons.knockDirection(px));
         }
       }
     }

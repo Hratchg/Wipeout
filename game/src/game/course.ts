@@ -68,3 +68,33 @@ export const FINISH_ROW = COURSE.length - 1;
 export const CHECKPOINT_ROWS = COURSE.map((spec, row) => ({ spec, row }))
   .filter(({ spec }) => spec.checkpoint)
   .map(({ row }) => row);
+
+/** True when this lane/row can be stood on (not open water or a blocked tile). */
+export function isLandable(lane: number, row: number): boolean {
+  if (lane < 0 || lane > 2 || row < 0 || row > FINISH_ROW) return false;
+  const spec = COURSE[row];
+  if (spec.kind === "gap") return false;
+  if (spec.kind === "solid") {
+    if (spec.blocked?.[lane]) return false;
+    return spec.tiles?.[lane] === true;
+  }
+  return spec.kind === "balls" || spec.kind === "platform";
+}
+
+/**
+ * Jump always aims two rows ahead. If that landing is water or a hole, the
+ * leap continues to the next safe tile so a jump actually clears the gap.
+ */
+export function leapLandingRow(lane: number, fromRow: number): number | null {
+  const preferred = fromRow + 2;
+  if (isLandable(lane, preferred)) return preferred;
+  for (
+    let row = preferred + 1;
+    row <= Math.min(fromRow + 4, FINISH_ROW);
+    row++
+  ) {
+    if (isLandable(lane, row)) return row;
+  }
+  if (preferred >= 0 && preferred <= FINISH_ROW) return preferred;
+  return null;
+}

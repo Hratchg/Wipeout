@@ -33,13 +33,16 @@ actionBus.on((action) => {
 onVoiceStatus((status) => ui.voiceFeedback(status));
 onCvStatus((status) => ui.cvFeedback(status));
 
-initKeyboard((e) => {
-  if (e.code === "F2") {
-    ui.toggleKeyOverlay();
-    return true;
-  }
-  return ui.handleOverlayKey(e);
-});
+initKeyboard(
+  (e) => {
+    if (e.code === "F2") {
+      ui.toggleKeyOverlay();
+      return true;
+    }
+    return ui.handleOverlayKey(e);
+  },
+  () => game.state === "playing",
+);
 
 let last = performance.now();
 engine.runRenderLoop(() => {

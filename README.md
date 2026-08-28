@@ -14,7 +14,8 @@ for a TV driven by a mini-PC. Three ways to play, all interchangeable:
   (bounce timing), a rotating sweeper arm around a hub pillar, punching-wall
   pistons, and a side-to-side moving platform.
 - Discrete grid movement (step/leap) so all three input methods feel the same:
-  `forward`, `back`, `left`, `right` step one tile; `jump` leaps two rows.
+  `forward`, `back`, `left`, `right` step one tile; `jump` leaps a water gap
+  immediately ahead (and only then).
 - 3 lives, checkpoints with respawn, timer, score with time bonus, comedic
   physics tumble into the water on hazard hits.
 - 10-foot broadcast UI with a `SPLASH ARENA` ribbon, remote-navigable control

@@ -8,6 +8,7 @@ import {
   circleHitsObb2D,
   sweeperHitsPlayer,
 } from "../src/game/collision.ts";
+import { leapLandingRow } from "../src/game/course.ts";
 
 const LANE_W = 2.4;
 const ROW_D = 2.4;
@@ -41,6 +42,17 @@ assert(
   "tap after window is pending again",
   classifyForwardTap(1000 + FORWARD_DOUBLE_TAP_MS + 10, 1000) === "pending",
 );
+
+console.log("leap only over water");
+assert("no leap from the start tile", leapLandingRow(1, 0) === null);
+assert("no leap across solid tiles", leapLandingRow(0, 2) === null);
+assert("leap from the tile before the first gap", leapLandingRow(0, 3) === 5);
+assert(
+  "leap from a hole immediately ahead",
+  leapLandingRow(1, 2) === 5,
+);
+assert("no leap from the middle of a platform", leapLandingRow(1, 8) === null);
+assert("leap the final water gap", leapLandingRow(1, 20) === 22);
 
 console.log("sweeper overlap");
 const sideX = -LANE_W;

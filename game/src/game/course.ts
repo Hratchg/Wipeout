@@ -81,11 +81,24 @@ export function isLandable(lane: number, row: number): boolean {
   return spec.kind === "balls" || spec.kind === "platform";
 }
 
+/** Open water: a full gap row or a hole in this lane. Pillars are not water. */
+export function isWaterAt(lane: number, row: number): boolean {
+  if (row < 0 || row > FINISH_ROW) return false;
+  const spec = COURSE[row];
+  if (spec.kind === "gap") return true;
+  if (spec.kind === "solid") {
+    if (spec.blocked?.[lane]) return false;
+    return spec.tiles?.[lane] !== true;
+  }
+  return false;
+}
+
 /**
- * Jump always aims two rows ahead. If that landing is water or a hole, the
- * leap continues to the next safe tile so a jump actually clears the gap.
+ * Leap only from a tile with water immediately ahead. Then aim two rows
+ * forward, and keep going if that landing is still water so the gap clears.
  */
 export function leapLandingRow(lane: number, fromRow: number): number | null {
+  if (!isWaterAt(lane, fromRow + 1)) return null;
   const preferred = fromRow + 2;
   if (isLandable(lane, preferred)) return preferred;
   for (

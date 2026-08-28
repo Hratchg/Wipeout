@@ -1,0 +1,131 @@
+{
+  "styleSheetCostCents": 7,
+  "decalCostCents": 7,
+  "costAccounting": {
+    "imageCostBasis": "Exact tool JSON totals: 91 cents for the initial style sheet, eleven references, and decal; 14 cents for two replacements; 7 cents for the final camera-tower replacement.",
+    "modelCostBasis": "Exact tool JSON total: 11 Tripo3D normal-quality conversions at 30 cents each ($3.30)."
+  },
+  "assets": [
+    {
+      "id": "platform",
+      "glb": "platform.glb",
+      "reference": "refs/platform.png",
+      "inGameSize": "2.25m × 0.55m × 2.25m",
+      "costCents": 37,
+      "imageCostCents": 7,
+      "modelCostCents": 30,
+      "fallback": "existing platform primitives",
+      "byteSize": 526848
+    },
+    {
+      "id": "ballMount",
+      "glb": "ball_mount.glb",
+      "reference": "refs/ball_mount.png",
+      "inGameSize": "2.2m diameter footprint",
+      "costCents": 37,
+      "imageCostCents": 7,
+      "modelCostCents": 30,
+      "fallback": "existing Big Ball primitives",
+      "byteSize": 390924
+    },
+    {
+      "id": "sweeperHub",
+      "glb": "sweeper_hub.glb",
+      "reference": "refs/sweeper_hub.png",
+      "inGameSize": "1.1m diameter × 2.4m high",
+      "costCents": 37,
+      "imageCostCents": 7,
+      "modelCostCents": 30,
+      "fallback": "existing sweeper hub primitive",
+      "byteSize": 363768
+    },
+    {
+      "id": "sweeperArm",
+      "glb": "sweeper_arm.glb",
+      "reference": "refs/sweeper_arm.png",
+      "inGameSize": "7.2m × 0.5m × 0.7m",
+      "costCents": 37,
+      "imageCostCents": 7,
+      "modelCostCents": 30,
+      "fallback": "existing sweeper arm primitive",
+      "byteSize": 359152
+    },
+    {
+      "id": "pistonWall",
+      "glb": "piston_wall.glb",
+      "reference": "refs/piston_wall.png",
+      "inGameSize": "0.8m × 2.8m × 2m",
+      "costCents": 37,
+      "imageCostCents": 7,
+      "modelCostCents": 30,
+      "fallback": "existing punching-wall primitive",
+      "byteSize": 439568
+    },
+    {
+      "id": "pistonPad",
+      "glb": "piston_pad.glb",
+      "reference": "refs/piston_pad.png",
+      "inGameSize": "1.2m × 1.4m × 1.5m",
+      "costCents": 37,
+      "imageCostCents": 7,
+      "modelCostCents": 30,
+      "fallback": "existing piston primitive",
+      "byteSize": 376816
+    },
+    {
+      "id": "movingPlatform",
+      "glb": "moving_platform.glb",
+      "reference": "refs/moving_platform.png",
+      "inGameSize": "2.3m × 0.5m × 2m",
+      "costCents": 37,
+      "imageCostCents": 7,
+      "modelCostCents": 30,
+      "fallback": "existing moving-platform primitive",
+      "byteSize": 338112
+    },
+    {
+      "id": "finishGate",
+      "glb": "finish_gate.glb",
+      "reference": "refs/finish_gate.png",
+      "inGameSize": "9m × 4m × 1m",
+      "costCents": 44,
+      "imageCostCents": 14,
+      "modelCostCents": 30,
+      "fallback": "existing finish-line primitives",
+      "byteSize": 389780
+    },
+    {
+      "id": "spectatorStand",
+      "glb": "spectator_stand.glb",
+      "reference": "refs/spectator_stand.png",
+      "inGameSize": "12m × 5m × 4m",
+      "costCents": 37,
+      "imageCostCents": 7,
+      "modelCostCents": 30,
+      "fallback": "omit decorative stand",
+      "byteSize": 497972
+    },
+    {
+      "id": "cameraTower",
+      "glb": "camera_tower.glb",
+      "reference": "refs/camera_tower.png",
+      "inGameSize": "2m × 5m × 2m",
+      "costCents": 51,
+      "imageCostCents": 21,
+      "modelCostCents": 30,
+      "fallback": "omit decorative camera tower",
+      "byteSize": 491760
+    },
+    {
+      "id": "arenaProps",
+      "glb": "arena_props.glb",
+      "reference": "refs/arena_props.png",
+      "inGameSize": "3m cluster footprint",
+      "costCents": 37,
+      "imageCostCents": 7,
+      "modelCostCents": 30,
+      "fallback": "omit decorative prop cluster",
+      "byteSize": 403856
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+# systemd unit for the game web server (Linux mini-PC).
+# Build once with `npm run build` in game/ before enabling.
+# Install: sudo cp deploy/wipeout-game.service /etc/systemd/system/
+#          sudo systemctl enable --now wipeout-game
+[Unit]
+Description=Wipeout game server (Vite preview of production build)
+After=network.target
+
+[Service]
+User=wipeout
+WorkingDirectory=/home/wipeout/Wipeout/game
+ExecStart=/usr/bin/npm run preview -- --host --port 5173
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

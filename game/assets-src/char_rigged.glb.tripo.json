@@ -1,0 +1,11 @@
+{
+  "kind": "rig",
+  "preset": "default",
+  "pbr": true,
+  "rig_type": "biped",
+  "status": "complete",
+  "image_to_model_task_id": "0e6aca93-a47c-4a45-9bd7-07f84775f790",
+  "stage": "animate_rig",
+  "prerigcheck_task_id": "584fc449-b9aa-4597-82be-f6d14b40700c",
+  "animate_rig_task_id": "adaa534b-d1d4-455e-b830-058d2729bab0"
+}

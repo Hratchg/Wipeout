@@ -1,0 +1,17 @@
+# systemd unit for the camera/voice input service (Linux mini-PC).
+# Install: sudo cp deploy/wipeout-input.service /etc/systemd/system/
+#          sudo systemctl enable --now wipeout-input
+# Adjust WorkingDirectory/User to your install location.
+[Unit]
+Description=Wipeout camera input service (YOLO26 pose -> WebSocket)
+After=network.target
+
+[Service]
+User=wipeout
+WorkingDirectory=/home/wipeout/Wipeout/input-service
+ExecStart=/home/wipeout/Wipeout/input-service/.venv/bin/python wipeout_input.py
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

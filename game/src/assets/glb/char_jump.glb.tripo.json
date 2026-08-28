@@ -1,0 +1,7 @@
+{
+  "kind": "anim",
+  "animate_rig_task_id": "adaa534b-d1d4-455e-b830-058d2729bab0",
+  "animation": "preset:biped:jump",
+  "status": "complete",
+  "animate_retarget_task_id": "66966952-56e5-4f58-923d-01d0d502ba67"
+}

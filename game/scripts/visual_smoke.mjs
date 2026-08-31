@@ -69,6 +69,8 @@ try {
   const result = await page.evaluate(
     ({ requiredArenaNodes, requiredHazardNodes, shadowWarnings }) => {
       const scene = window.__wipeout.player.root.getScene();
+      const playfield = scene.getNodeByName("course-playfield");
+      const qualifierMissing = !window.__wipeout.rebuildPlayfield;
       const game = window.__wipeout.game;
       const ui = game.ui;
       const effects = game.effects;
@@ -103,19 +105,19 @@ try {
       const player = window.__wipeout.player;
       player.respawn(1, 0);
       player.moveTo(1, 1, "step");
-      player.update(0.12);
+      player.update(0.16);
       const stepMidLean = player.visualRoot?.rotation.x ?? 0;
       const stepMidMotion = player.motion;
-      player.update(0.12);
+      player.update(0.20);
       const stepLanding = {
         motion: player.motion,
         row: player.row,
         lean: player.visualRoot?.rotation.x ?? null,
       };
       player.moveTo(1, 3, "leap");
-      player.update(0.18);
+      player.update(0.20);
       const leapAscentScaleY = player.visualRoot?.scaling.y ?? 1;
-      player.update(0.25);
+      player.update(0.35);
       const leapLandingScaleY = player.visualRoot?.scaling.y ?? 1;
       player.update(0.12);
       const leapLanding = {
@@ -125,6 +127,8 @@ try {
       };
       return {
         ready: window.__arenaReady,
+        playfieldPresent: !!playfield,
+        qualifierMissing,
         failures: window.__wipeout.arenaAssets.failures,
         platformPresent: window.__wipeout.arenaAssets.has("platform"),
         hasMotionApi,
@@ -196,7 +200,7 @@ try {
     result.effectTextureCountAfter !== result.effectTextureCountBefore ||
     result.particleSystemCountAfter !== result.particleSystemCountBefore ||
     result.playerResponse.stepMidMotion !== "tween" ||
-    result.playerResponse.stepMidLean <= 0.1 ||
+    result.playerResponse.stepMidLean <= 0.05 ||
     result.playerResponse.stepLanding.motion !== "idle" ||
     result.playerResponse.stepLanding.row !== 1 ||
     result.playerResponse.stepLanding.lean !== 0 ||
@@ -210,6 +214,7 @@ try {
     persistedMotionResult.reducedMotion !== true ||
     persistedMotionResult.motionReducedLabel !== "MOTION: REDUCED" ||
     result.absentArenaNodes.length ||
+    !result.playfieldPresent ||
     result.absentHazardNodes.length ||
     !result.hazardPrimitiveFallbacksHidden ||
     !result.platformReceivesShadows ||

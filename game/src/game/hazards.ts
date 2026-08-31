@@ -10,6 +10,7 @@ import {
   circleHitsAabb2D,
   PLAYER_HIT_RADIUS,
   sweeperHitsPlayer,
+  sweeperTangent,
 } from "./collision";
 import { LANE_W, laneX, rowZ, WATER_Y } from "./course";
 import type { ArenaAssets } from "./arenaAssets";
@@ -72,7 +73,12 @@ export class BigBalls {
   private phases = [0, 2.1, 4.2];
   private bob = [0, 0, 0]; // current sin value per lane
 
-  constructor(scene: Scene, row: number, assets: ArenaAssets) {
+  constructor(
+    scene: Scene,
+    row: number,
+    assets: ArenaAssets,
+    parent?: TransformNode,
+  ) {
     const mat = inflatableMaterial(
       scene,
       "ball-mat",
@@ -80,6 +86,7 @@ export class BigBalls {
     );
     for (let lane = 0; lane < 3; lane++) {
       const root = new TransformNode(`ball-root-${lane}`, scene);
+      if (parent) root.parent = parent;
       root.position = new Vector3(laneX(lane), BigBalls.BASE_Y, rowZ(row));
 
       const ball = MeshBuilder.CreateSphere(
@@ -107,6 +114,14 @@ export class BigBalls {
       this.balls.push(ball);
       this.roots.push(root);
     }
+  }
+
+  dispose(): void {
+    for (const root of this.roots) {
+      root.dispose();
+    }
+    this.roots.length = 0;
+    this.balls.length = 0;
   }
 
   update(t: number): void {
@@ -139,9 +154,15 @@ export class Sweeper {
   private hubZ: number;
   private angle = 0;
 
-  constructor(scene: Scene, row: number, assets: ArenaAssets) {
+  constructor(
+    scene: Scene,
+    row: number,
+    assets: ArenaAssets,
+    parent?: TransformNode,
+  ) {
     this.hubZ = rowZ(row);
     this.root = new TransformNode("sweeper-root", scene);
+    if (parent) this.root.parent = parent;
     this.root.position = new Vector3(0, Sweeper.ARM_Y, this.hubZ);
 
     const hubMat = inflatableMaterial(
@@ -221,6 +242,10 @@ export class Sweeper {
     }
   }
 
+  dispose(): void {
+    this.root.dispose();
+  }
+
   update(dt: number): void {
     this.angle = (this.angle + Sweeper.SPEED * dt) % (Math.PI * 2);
     this.root.rotation.y = this.angle;
@@ -240,9 +265,23 @@ export class Sweeper {
   }
 
   knockDirection(px: number, pz: number): Vector3 {
-    const dir = new Vector3(px, 0, pz - this.hubZ);
-    if (dir.lengthSquared() < 0.01) return new Vector3(1, 0, 0.2);
-    return dir;
+    return this.knockImpulse(px, pz).linear;
+  }
+
+  /** Throw in the arm's swing direction, with spin from the contact offset. */
+  knockImpulse(px: number, pz: number): { linear: Vector3; angular: Vector3 } {
+    const { vx, vz } = sweeperTangent(px, pz, this.hubZ, Sweeper.SPEED);
+    const tangent = new Vector3(vx, 0, vz);
+    const outward = new Vector3(px, 0, pz - this.hubZ);
+    if (outward.lengthSquared() < 0.01) outward.set(1, 0, 0);
+    else outward.normalize();
+    const speed = tangent.length();
+    const linear = tangent.scale(2.2).add(outward.scale(2.4));
+    linear.y = 5.4 + Math.min(speed, 4) * 0.4;
+    return {
+      linear,
+      angular: new Vector3(-vz * 1.15, Sweeper.SPEED * 3.4, vx * 1.15),
+    };
   }
 }
 
@@ -251,16 +290,22 @@ export class PistonRow {
   private static readonly PERIOD = 2.8; // seconds
   private static readonly TRAVEL = LANE_W; // how far the pad slides
 
+  private root: TransformNode;
   private pads: Partial<Record<number, Mesh>> = {};
   private offsets: Partial<Record<number, number>> = {};
   private extensions: Partial<Record<number, number>> = {};
+  private padSpeed: Partial<Record<number, number>> = {};
+  private lastT = 0;
 
   constructor(
     scene: Scene,
     row: number,
     lanes: Array<0 | 2>,
     assets: ArenaAssets,
+    parent?: TransformNode,
   ) {
+    this.root = new TransformNode("piston-row-root", scene);
+    if (parent) this.root.parent = parent;
     const wallMat = inflatableMaterial(
       scene,
       "piston-wall-mat",
@@ -282,6 +327,7 @@ export class PistonRow {
         scene,
       );
       wall.material = wallMat;
+      wall.parent = this.root;
       wall.position = new Vector3(wallX, 1.0, rowZ(row));
 
       const pad = MeshBuilder.CreateBox(
@@ -290,6 +336,7 @@ export class PistonRow {
         scene,
       );
       pad.material = padMat;
+      pad.parent = this.root;
       pad.position = new Vector3(wallX - side * 0.4, 0.7, rowZ(row));
 
       const generatedWall = assets.instantiate(
@@ -297,6 +344,7 @@ export class PistonRow {
         `generated-piston-wall-${lane}`,
       );
       if (generatedWall) {
+        generatedWall.parent = this.root;
         centerGeneratedAt(generatedWall, wall.position);
         wall.setEnabled(false);
       }
@@ -318,7 +366,13 @@ export class PistonRow {
     });
   }
 
+  dispose(): void {
+    this.root.dispose();
+  }
+
   update(t: number): void {
+    const dt = Math.max(t - this.lastT, 1 / 120);
+    this.lastT = t;
     for (const laneKey of Object.keys(this.pads)) {
       const lane = Number(laneKey);
       const side = lane === 0 ? -1 : 1;
@@ -330,11 +384,13 @@ export class PistonRow {
       else if (phase < 0.6) ext = (phase - 0.45) / 0.15;
       else if (phase < 0.75) ext = 1;
       else ext = 1 - (phase - 0.75) / 0.25;
+      const prev = this.extensions[lane] ?? 0;
       this.extensions[lane] = ext;
       const pad = this.pads[lane];
       if (pad) {
         const baseX = laneX(lane) + side * (LANE_W * 0.9 - 0.4);
         pad.position.x = baseX - side * ext * PistonRow.TRAVEL;
+        this.padSpeed[lane] = ((-side * (ext - prev) * PistonRow.TRAVEL) / dt);
       }
     }
   }
@@ -363,7 +419,38 @@ export class PistonRow {
   }
 
   knockDirection(px: number): Vector3 {
-    return new Vector3(px === 0 ? 1 : -Math.sign(px), 0, 0.2);
+    return this.knockImpulse(px, 0).linear;
+  }
+
+  /** Shove along the pad's current punch velocity. */
+  knockImpulse(px: number, pz: number): { linear: Vector3; angular: Vector3 } {
+    let vx = 0;
+    for (const laneKey of Object.keys(this.pads)) {
+      const lane = Number(laneKey);
+      const pad = this.pads[lane];
+      if (!pad) continue;
+      pad.computeWorldMatrix(true);
+      const bounds = pad.getHierarchyBoundingVectors(true);
+      if (
+        circleHitsAabb2D(
+          px,
+          pz,
+          PLAYER_HIT_RADIUS,
+          bounds.min.x,
+          bounds.max.x,
+          bounds.min.z,
+          bounds.max.z,
+        )
+      ) {
+        vx = this.padSpeed[lane] ?? 0;
+        break;
+      }
+    }
+    if (Math.abs(vx) < 0.4) vx = px === 0 ? 5 : -Math.sign(px) * 5;
+    return {
+      linear: new Vector3(vx * 1.15, 5.3, 0.55),
+      angular: new Vector3(0.4, vx * 0.35, -vx * 0.85),
+    };
   }
 }
 
@@ -373,7 +460,12 @@ export class MovingPlatform {
   mesh: Mesh;
   private t = 0;
 
-  constructor(scene: Scene, row: number, assets: ArenaAssets) {
+  constructor(
+    scene: Scene,
+    row: number,
+    assets: ArenaAssets,
+    parent?: TransformNode,
+  ) {
     const mat = inflatableMaterial(
       scene,
       "platform-mat",
@@ -385,6 +477,7 @@ export class MovingPlatform {
       scene,
     );
     this.mesh.material = mat;
+    if (parent) this.mesh.parent = parent;
     this.mesh.position = new Vector3(0, -0.25, rowZ(row));
 
     const generatedPlatform = assets.instantiate(
@@ -399,6 +492,10 @@ export class MovingPlatform {
       );
       this.mesh.isVisible = false;
     }
+  }
+
+  dispose(): void {
+    this.mesh.dispose();
   }
 
   update(t: number): void {

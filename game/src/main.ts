@@ -20,7 +20,7 @@ const arenaAssets = await loadArenaAssets(scene);
 const world = buildWorld(scene, arenaAssets);
 const ui = new Ui();
 const player = new Player(scene, world.shadows);
-const game = new Game(scene, world, player, ui);
+const game = new Game(scene, world, player, ui, arenaAssets);
 
 // Generated character (falls back to the capsule placeholder if missing).
 loadCharacter(scene, player, world.shadows);

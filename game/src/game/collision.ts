@@ -56,6 +56,23 @@ export function circleHitsObb2D(
   return circleHitsAabb2D(lx, lz, radius, -halfX, halfX, -halfZ, halfZ);
 }
 
+/** Ease-in-out used for grid steps so they don't start and stop like a teleport. */
+export function smootherstep(t: number): number {
+  const u = Math.min(1, Math.max(0, t));
+  return u * u * u * (u * (u * 6 - 15) + 10);
+}
+
+/**
+ * World XZ velocity of a point on the sweeper, given Babylon Y-rotation
+ * of `omega` rad/s. v = (ω·rz, −ω·rx).
+ */
+export function sweeperTangent(px: number, pz: number, hubZ: number, omega: number): {
+  vx: number;
+  vz: number;
+} {
+  return { vx: omega * (pz - hubZ), vz: -omega * px };
+}
+
 /** True when the rotating sweeper arm overlaps the player in XZ. */
 export function sweeperHitsPlayer(
   angle: number,

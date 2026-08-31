@@ -5,6 +5,7 @@ import {
   TransformNode,
   Vector3,
   type AssetContainer,
+  type InstantiatedEntries,
 } from "@babylonjs/core";
 import manifest from "../assets/arena/manifest.json";
 
@@ -81,6 +82,21 @@ function parseTargetSize(description: string): TargetSize {
   }
 
   throw new Error(`Unsupported arena target size: ${description}`);
+}
+
+function bindInstantiatedLeftovers(
+  root: TransformNode,
+  instance: InstantiatedEntries,
+): void {
+  const leftovers = [
+    ...instance.animationGroups,
+    ...instance.skeletons,
+  ];
+  root.onDisposeObservable.addOnce(() => {
+    for (const leftover of leftovers) {
+      leftover.dispose();
+    }
+  });
 }
 
 function normalizeRoot(root: TransformNode, targetSize: TargetSize): void {
@@ -192,6 +208,7 @@ export async function loadArenaAssets(scene: Scene): Promise<ArenaAssets> {
           node.parent = root;
           node.setEnabled(true);
         }
+        bindInstantiatedLeftovers(root, instance);
         normalizeRoot(root, asset.targetSize);
         return root;
       } catch (error) {

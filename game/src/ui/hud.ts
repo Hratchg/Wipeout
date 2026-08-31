@@ -9,11 +9,23 @@ import type { Action } from "../types";
 import type { VoiceStatus } from "../input/voice";
 import type { CvStatus } from "../input/cvSocket";
 import { bindKey } from "../input/keyboard";
+import type { Course } from "../game/course";
 
 export type ScreenName = "title" | "select" | "hud" | "gameover" | "win";
-export type MenuItemId = "voice" | "camera" | "motion" | "start";
+export type MenuItemId =
+  | "voice"
+  | "camera"
+  | "motion"
+  | "startQualifier"
+  | "startMain";
 
-const MENU_ITEMS: MenuItemId[] = ["voice", "camera", "motion", "start"];
+const MENU_ITEMS: MenuItemId[] = [
+  "voice",
+  "camera",
+  "motion",
+  "startQualifier",
+  "startMain",
+];
 const REDUCED_MOTION_KEY = "wipeout.reducedMotion";
 const SAFE_X = 112;
 const SAFE_Y = 60;
@@ -66,6 +78,10 @@ export class Ui {
   // HUD elements
   private hearts!: TextBlock;
   private timer!: TextBlock;
+  private timerLabel!: TextBlock;
+  private hudHeaderStrap!: TextBlock;
+  private winHeaderStrap!: TextBlock;
+  private gameoverHeaderStrap!: TextBlock;
   private score!: TextBlock;
   private voiceBadge!: TextBlock;
   private cvBadge!: TextBlock;
@@ -91,7 +107,8 @@ export class Ui {
 
   // End screens
   private gameoverStats!: TextBlock;
-  private winStats!: TextBlock;
+  gameoverTitle!: TextBlock;
+  winStats!: TextBlock;
 
   // Key overlay
   private keyOverlay!: Rectangle;
@@ -162,40 +179,48 @@ export class Ui {
 
   private addBroadcastHeader(
     screen: Rectangle,
-    screenName: ScreenName,
+    screenName: string,
     strapline: string,
-  ): Rectangle {
+    height = 118,
+  ): { header: Rectangle; strap: TextBlock } {
+    const compact = height <= 80;
     const header = new Rectangle(`broadcast-header-${screenName}`);
     header.width = "1696px";
-    header.height = "118px";
-    header.cornerRadius = 14;
+    header.height = `${height}px`;
+    header.cornerRadius = compact ? 10 : 14;
     header.thickness = 0;
     header.background = COLORS.red;
     header.verticalAlignment = Control.VERTICAL_ALIGNMENT_TOP;
     header.top = SAFE_Y;
     header.isPointerBlocker = false;
 
-    const mark = text("SPLASH ARENA", 40, "white", 2);
+    const mark = text("SPLASH ARENA", compact ? 26 : 40, "white", 2);
     mark.width = "640px";
-    mark.height = "64px";
+    mark.height = compact ? "40px" : "64px";
     mark.textHorizontalAlignment = Control.HORIZONTAL_ALIGNMENT_LEFT;
     mark.horizontalAlignment = Control.HORIZONTAL_ALIGNMENT_LEFT;
     mark.left = 38;
     header.addControl(mark);
 
     const segment = new Rectangle();
-    segment.width = "18px";
+    segment.width = compact ? "14px" : "18px";
     segment.height = 0.62;
     segment.cornerRadius = 8;
     segment.thickness = 0;
     segment.background = COLORS.yellow;
     segment.horizontalAlignment = Control.HORIZONTAL_ALIGNMENT_RIGHT;
-    segment.left = -580;
+    segment.left = compact ? -520 : -580;
     header.addControl(segment);
 
-    const strap = text(strapline, 25, COLORS.ink);
+    const strap = text(
+      strapline,
+      compact ? 20 : 25,
+      COLORS.ink,
+      0,
+      `broadcast-header-${screenName}-strap`,
+    );
     strap.width = "520px";
-    strap.height = "76px";
+    strap.height = compact ? "52px" : "76px";
     strap.textHorizontalAlignment = Control.HORIZONTAL_ALIGNMENT_RIGHT;
     strap.horizontalAlignment = Control.HORIZONTAL_ALIGNMENT_RIGHT;
     strap.left = -34;
@@ -203,22 +228,23 @@ export class Ui {
 
     const underline = new Rectangle();
     underline.width = 1;
-    underline.height = "8px";
+    underline.height = compact ? "6px" : "8px";
     underline.thickness = 0;
     underline.background = COLORS.yellow;
     underline.verticalAlignment = Control.VERTICAL_ALIGNMENT_BOTTOM;
     header.addControl(underline);
 
     screen.addControl(header);
-    return header;
+    return { header, strap };
   }
 
   private addPanelCopy(
     panel: Rectangle,
     label: string,
     value: TextBlock,
-  ): void {
-    const caption = text(label, 22, COLORS.muted);
+    labelName = "",
+  ): TextBlock {
+    const caption = text(label, 22, COLORS.muted, 0, labelName);
     caption.width = 0.78;
     caption.height = "34px";
     caption.textHorizontalAlignment = Control.HORIZONTAL_ALIGNMENT_LEFT;
@@ -234,11 +260,23 @@ export class Ui {
     value.left = 46;
     value.top = 19;
     panel.addControl(value);
+    return caption;
   }
 
   private buildHud(): void {
     const hud = this.makeScreen("hud", "transparent");
     hud.isPointerBlocker = false;
+
+    const hudRibbon = this.addBroadcastHeader(
+      hud,
+      "hud",
+      "LIVE FROM YOUR LIVING ROOM",
+      72,
+    );
+    this.hudHeaderStrap = hudRibbon.strap;
+    hudRibbon.header.zIndex = 0;
+
+    const panelTop = SAFE_Y + 78;
 
     const livesPanel = this.makeBroadcastPanel(
       "hud-lives-panel",
@@ -249,7 +287,8 @@ export class Ui {
     livesPanel.horizontalAlignment = Control.HORIZONTAL_ALIGNMENT_LEFT;
     livesPanel.verticalAlignment = Control.VERTICAL_ALIGNMENT_TOP;
     livesPanel.left = SAFE_X;
-    livesPanel.top = SAFE_Y;
+    livesPanel.top = panelTop;
+    livesPanel.zIndex = 1;
     hud.addControl(livesPanel);
     this.hearts = text("\u2665\u2665\u2665", 55, COLORS.red, 2, "hud-hearts");
     this.addPanelCopy(livesPanel, "LIVES", this.hearts);
@@ -261,10 +300,16 @@ export class Ui {
       COLORS.yellow,
     );
     timerPanel.verticalAlignment = Control.VERTICAL_ALIGNMENT_TOP;
-    timerPanel.top = SAFE_Y;
+    timerPanel.top = panelTop;
+    timerPanel.zIndex = 1;
     hud.addControl(timerPanel);
     this.timer = text("0:00.0", 53, "white", 2, "hud-timer");
-    this.addPanelCopy(timerPanel, "COURSE TIME", this.timer);
+    this.timerLabel = this.addPanelCopy(
+      timerPanel,
+      "COURSE TIME",
+      this.timer,
+      "hud-timer-label",
+    );
 
     const scorePanel = this.makeBroadcastPanel(
       "hud-score-panel",
@@ -275,7 +320,8 @@ export class Ui {
     scorePanel.horizontalAlignment = Control.HORIZONTAL_ALIGNMENT_RIGHT;
     scorePanel.verticalAlignment = Control.VERTICAL_ALIGNMENT_TOP;
     scorePanel.left = -SAFE_X;
-    scorePanel.top = SAFE_Y;
+    scorePanel.top = panelTop;
+    scorePanel.zIndex = 1;
     hud.addControl(scorePanel);
     this.score = text("0", 53, COLORS.yellow, 2, "hud-score");
     this.addPanelCopy(scorePanel, "SCORE", this.score);
@@ -435,23 +481,23 @@ export class Ui {
 
     const card = new Rectangle("select-card");
     card.width = "1280px";
-    card.height = "820px";
+    card.height = "890px";
     card.cornerRadius = 28;
     card.thickness = 4;
     card.color = "rgba(255,255,255,0.26)";
     card.background = "rgba(3, 12, 30, 0.9)";
-    card.top = 65;
+    card.top = 16;
     card.isPointerBlocker = false;
     screen.addControl(card);
 
     const panel = new StackPanel();
     panel.width = "1120px";
-    panel.height = "730px";
-    panel.spacing = 11;
+    panel.height = "800px";
+    panel.spacing = 8;
     card.addControl(panel);
 
-    const heading = text("CHOOSE YOUR CONTROLS", 58, COLORS.yellow, 3);
-    heading.height = "86px";
+    const heading = text("CHOOSE YOUR CONTROLS", 52, COLORS.yellow, 3);
+    heading.height = "70px";
     panel.addControl(heading);
 
     const remoteRow = this.makeMenuRow(
@@ -470,7 +516,9 @@ export class Ui {
             ? "CAMERA: OFF"
             : id === "motion"
               ? "MOTION: FULL"
-            : "START GAME";
+              : id === "startQualifier"
+                ? "START QUALIFIER"
+                : "START MAIN EVENT";
       const icon =
         id === "voice"
           ? "\u25cf"
@@ -491,7 +539,7 @@ export class Ui {
       28,
       COLORS.muted,
     );
-    hint.height = "54px";
+    hint.height = "46px";
     panel.addControl(hint);
 
     this.refreshMenu();
@@ -546,7 +594,11 @@ export class Ui {
 
   private buildEndScreens(): void {
     const gameover = this.makeScreen("gameover", "rgba(45, 4, 12, 0.68)");
-    this.addBroadcastHeader(gameover, "gameover", "RESULTS DESK");
+    this.gameoverHeaderStrap = this.addBroadcastHeader(
+      gameover,
+      "gameover",
+      "RESULTS DESK",
+    ).strap;
     this.gameoverStats = this.buildEndCard(
       gameover,
       "gameover",
@@ -560,7 +612,11 @@ export class Ui {
     // Keep the global win wash light so 3D confetti and the finish gate stay
     // readable, while the local card remains opaque enough for statistics.
     const win = this.makeScreen("win", "rgba(3, 11, 28, 0.2)");
-    this.addBroadcastHeader(win, "win", "FINISH LINE LIVE");
+    this.winHeaderStrap = this.addBroadcastHeader(
+      win,
+      "win",
+      "FINISH LINE LIVE",
+    ).strap;
     this.winStats = this.buildEndCard(
       win,
       "win",
@@ -608,6 +664,7 @@ export class Ui {
     const title = text(titleCopy, leftAligned ? 77 : 94, accent, 5);
     title.height = "140px";
     panel.addControl(title);
+    if (name === "gameover") this.gameoverTitle = title;
 
     const statFrame = new Rectangle(`end-stats-${name}`);
     statFrame.width = leftAligned ? "690px" : "860px";
@@ -695,10 +752,8 @@ export class Ui {
     for (const key of Object.keys(this.screens) as ScreenName[]) {
       this.screens[key].isVisible = key === name;
     }
-    // HUD stays visible under end screens for context.
-    if (name === "gameover" || name === "win") {
-      this.screens.hud.isVisible = true;
-    }
+    // End overlays already wash the 3D scene; keep the HUD screen off so
+    // the 72px ribbon and shifted stat panels do not peek under the strap.
   }
 
   menuMove(delta: number): void {
@@ -762,7 +817,7 @@ export class Ui {
               ? COLORS.green
               : id === "motion" && this.reducedMotion
                 ? COLORS.yellow
-                : id === "start"
+                : id === "startQualifier" || id === "startMain"
                   ? COLORS.yellow
                   : COLORS.blue;
       }
@@ -805,6 +860,28 @@ export class Ui {
   setEndStats(screen: "gameover" | "win", statsLine: string): void {
     if (screen === "gameover") this.gameoverStats.text = statsLine;
     else this.winStats.text = statsLine;
+  }
+
+  applyCourse(course: Course): void {
+    const countdown = course.rules.countdownSeconds;
+    this.setTimerLabel(countdown == null ? "COURSE TIME" : "TIME LEFT");
+    this.hudHeaderStrap.text = course.broadcastLabel;
+    if (course.id === "qualifier") {
+      this.winHeaderStrap.text = "QUALIFIER LIVE";
+      this.gameoverHeaderStrap.text = "QUALIFIER LIVE";
+    } else {
+      this.winHeaderStrap.text = "FINISH LINE LIVE";
+      this.gameoverHeaderStrap.text = "RESULTS DESK";
+    }
+    if (countdown != null) this.setTimer(countdown);
+  }
+
+  setGameoverTitle(title: string): void {
+    this.gameoverTitle.text = title;
+  }
+
+  setTimerLabel(label: string): void {
+    this.timerLabel.text = label;
   }
 
   showCheckpoint(row: number): void {

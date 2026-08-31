@@ -13,7 +13,7 @@ import {
   VertexBuffer,
 } from "@babylonjs/core";
 import type { ArenaAssetId, ArenaAssets } from "./arenaAssets";
-import { COURSE, rowZ, WATER_Y } from "./course";
+import { maxCourseRowCount, rowZ, WATER_Y } from "./course";
 import {
   emissiveMaterial,
   inflatableMaterial,
@@ -199,7 +199,7 @@ function createPropFallback(
   return root;
 }
 
-function createSky(scene: Scene, root: TransformNode): void {
+function createSky(scene: Scene, root: TransformNode, rowCount: number): void {
   const sky = MeshBuilder.CreateSphere(
     "arena-sky",
     {
@@ -210,7 +210,7 @@ function createSky(scene: Scene, root: TransformNode): void {
     scene,
   );
   sky.parent = root;
-  sky.position.set(0, 12, rowZ(COURSE.length / 2));
+  sky.position.set(0, 12, rowZ(rowCount / 2));
   sky.infiniteDistance = true;
   sky.isPickable = false;
 
@@ -282,7 +282,8 @@ export function buildArenaEnvironment(
   scene.fogEnd = 135;
   scene.fogColor = new Color3(0.65, 0.86, 0.98);
 
-  createSky(scene, root);
+  const rowCount = maxCourseRowCount();
+  createSky(scene, root, rowCount);
 
   const fill = new HemisphericLight(
     "arena-cool-fill",
@@ -293,7 +294,7 @@ export function buildArenaEnvironment(
   fill.diffuse = new Color3(0.62, 0.82, 1);
   fill.groundColor = new Color3(0.08, 0.22, 0.36);
 
-  const courseLength = rowZ(COURSE.length) + 40;
+  const courseLength = rowZ(rowCount) + 40;
   const water = MeshBuilder.CreateGround(
     "ocean",
     {
@@ -305,7 +306,7 @@ export function buildArenaEnvironment(
     scene,
   );
   water.parent = root;
-  water.position = new Vector3(0, WATER_Y, rowZ(COURSE.length / 2));
+  water.position = new Vector3(0, WATER_Y, rowZ(rowCount / 2));
   water.receiveShadows = true;
   water.isPickable = false;
 

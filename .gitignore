@@ -9,3 +9,5 @@ input-service/.venv/
 input-service/yolo26n-pose.pt
 *.pyc
 __pycache__/
+.superpowers/
+.worktrees/

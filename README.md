@@ -10,14 +10,19 @@ for a TV driven by a mini-PC. Three ways to play, all interchangeable:
 
 ## What is built
 
-- Full 3-lane, 23-row obstacle course over water: gaps, holes, the Big Balls
-  (bounce timing), a rotating sweeper arm around a hub pillar, punching-wall
-  pistons, and a side-to-side moving platform.
+- Two courses from the select screen: **START QUALIFIER** (15 rows, 50s
+  countdown labeled `TIME LEFT`, `TIME'S UP!` at 0:00) and **START MAIN EVENT**
+  (the 23-row course with a count-up timer). Both reuse the same 3-lane kit
+  over water: gaps, holes, the Big Balls (bounce timing), a rotating sweeper
+  arm around a hub pillar, punching-wall pistons, and a side-to-side moving
+  platform.
 - Discrete grid movement (step/leap) so all three input methods feel the same:
   `forward`, `back`, `left`, `right` step one tile; `jump` leaps a water gap
   immediately ahead (and only then).
 - 3 lives, checkpoints with respawn, timer, score with time bonus, comedic
-  physics tumble into the water on hazard hits.
+  physics tumble into the water on hazard hits. Steps ease in and out;
+  sweeper and piston hits throw the contestant with the obstacle's real
+  swing or punch, not a canned knockback.
 - 10-foot broadcast UI with a `SPLASH ARENA` ribbon, remote-navigable control
   cards, safe-margin HUD panels, input-status icons, animated checkpoint/final
   lower-thirds, and framed result screens that leave finish confetti readable.
@@ -45,9 +50,16 @@ for a TV driven by a mini-PC. Three ways to play, all interchangeable:
 
 ## What is left
 
-- Play-test gesture thresholds with a real person in front of a real webcam
-  (`input-service/wipeout_input.py --preview` shows the calibration/skeleton
-  debug view) and tune `SIDE_ENTER`, `JUMP_RISE`, `DEPTH_*` constants.
+- Real-human jump UAT is still open. A 90-second live webcam session on this
+  MacBook stayed in `calibrating` (0 jumps): YOLO saw a person but never got
+  40 frames with both shoulders and both hips. Stand 6–8 feet from the camera
+  so your full torso is in frame, stay still until status is `tracking`, then
+  jump in place ten times:
+  `cd input-service && .venv/bin/python wipeout_input.py --camera 0`
+  and `cd game && node scripts/jump_uat.mjs`. Tune `JUMP_RISE` / `SIDE_ENTER`
+  / `DEPTH_*` only from that standing session.
+- Mini-PC 60 FPS target / 30 FPS floor has not been measured on the living-room
+  box. The M5 Pro reference run is in Measured performance below.
 - Voice mode needs internet (Chrome Web Speech API). If the living room is
   noisy or offline, add offline Vosk recognition to the input service.
 
@@ -83,15 +95,32 @@ On a Linux mini-PC, install the systemd units in `deploy/` and add
 
 Controls: arrows = move, double-tap up = jump,
 Space = jump, F2 = remote button setup. Enter still confirms menus.
-In the menu, toggle VOICE and CAMERA on, then START GAME. Voice needs mic
-permission the first time; camera mode needs the input service running.
+In the menu, toggle VOICE and CAMERA on, then START QUALIFIER or
+START MAIN EVENT. Voice needs mic permission the first time; camera mode
+needs the input service running.
 
-## Measured latency (Apple M5 Pro reference machine)
+## Measured performance (Apple M5 Pro reference machine)
+
+1080p gate (`game/scripts/perf_check.mjs`, 20 s after assets loaded):
+
+- Renderer: ANGLE Metal, Apple M5 Pro
+- Average FPS: 120.01
+- p95 frame time: 9.20 ms
+- Uncaught page errors: 0
+- Failed required asset requests: 0
+
+The living-room mini-PC 60 FPS target / 30 FPS floor is still a deployment
+check on that box. This machine is above both.
 
 - Remote/keyboard: same-frame (< 16 ms)
 - Camera: YOLO26n-pose at 416 px = ~20 ms/frame inference (50 FPS), total
   camera-to-action ≈ 50–100 ms including capture — under the 150 ms target
 - Voice: Web Speech interim results, typically 200–500 ms per keyword
+
+Proof video (18.6 s, watched back): `game/public/proof.mp4`. It shows the
+title card, both Start rows, generated contestant, Main Event early course,
+Big Balls, a sweeper wipeout, the later course, and the win / confetti
+result.
 
 ## Asset table
 

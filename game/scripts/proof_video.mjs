@@ -30,7 +30,6 @@ await page.waitForTimeout(3500); // character load + a beat on the title screen
 const outcome = await page.evaluate(async () => {
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const { game, player, actionBus, world } = window.__wipeout;
-  const hz = world.hazards;
   const LANE_W = 2.4;
   const laneX = (l) => (l - 1) * LANE_W;
   const emit = (a) => actionBus.emit(a, "remote");
@@ -53,64 +52,171 @@ const outcome = await page.evaluate(async () => {
     const t0 = performance.now();
     while (!fn() && performance.now() - t0 < timeout) await sleep(30);
   };
+  const at = (row, lane) =>
+    player.row === row && player.lane === lane && player.motion === "idle";
+  const actTo = async (action, row, lane, timeout = 5000) => {
+    const t0 = performance.now();
+    while (!at(row, lane) && game.state === "playing" && performance.now() - t0 < timeout) {
+      if (player.motion === "idle") emit(action);
+      await sleep(80);
+      await waitSettled();
+      await sleep(80);
+    }
+  };
 
-  // Menu: title -> select -> start (keeps remote-only controls)
+  // Menu: title -> select -> startMain (keeps remote-only controls)
   emit("jump");
   await sleep(600);
-  emit("back");
-  await sleep(250);
-  emit("back");
-  await sleep(250);
-  emit("back");
-  await sleep(250);
+  while (game.ui.menuFocused() !== "startMain") {
+    emit("back");
+    await sleep(250);
+  }
   emit("jump");
   await sleep(800);
+  const hazards = () => world.hazards;
 
   // Rows 0-2, dodge the row-3 hole, leap the row-4 gap
-  await act("forward");
-  await act("forward");
-  await act("left");
-  await act("forward");
-  await act("jump"); // row 5
-  await act("right");
-  await act("forward"); // row 6 (middle tile)
-  await act("jump"); // row 8 checkpoint
-  await act("forward"); // row 9
+  await actTo("forward", 1, 1);
+  await actTo("forward", 2, 1);
+  await actTo("left", 2, 0);
+  await actTo("forward", 3, 0);
+  await actTo("jump", 5, 0);
+  await actTo("right", 5, 1);
+  await actTo("forward", 6, 1);
+  await actTo("jump", 8, 1);
+  await actTo("forward", 9, 1);
 
   // Big Balls: step on as the middle ball rises, bounce to row 12
-  await until(() => !hz.balls.isUp(1));
-  await until(() => hz.balls.isUp(1));
-  emit("forward");
-  await until(() => player.row === 12 && player.motion === "idle", 6000);
+  let bounced = false;
+  for (let attempt = 0; attempt < 4 && !bounced && game.state === "playing"; attempt++) {
+    await until(() => game.state === "playing" && player.motion === "idle", 8000);
+    if (game.state !== "playing") break;
+    while (player.row > 9 && player.motion === "idle") await act("back");
+    while (player.row < 9 && player.motion === "idle") await act("forward");
+    while (player.lane !== 1 && player.motion === "idle") {
+      await act(player.lane < 1 ? "right" : "left");
+    }
+    await until(() => !hazards().balls.isUp(1));
+    await until(() => hazards().balls.isUp(1));
+    if (player.lane !== 1 || player.row !== 9) continue;
+    emit("forward");
+    await until(
+      () =>
+        (player.row === 12 && player.motion === "idle") ||
+        player.motion === "fall" ||
+        player.motion === "tumble" ||
+        player.motion === "gone" ||
+        game.state !== "playing",
+      6000,
+    );
+    bounced = player.row === 12 && game.state === "playing";
+    if (!bounced) {
+      await until(() => game.state !== "playing" || player.motion === "idle", 8000);
+    }
+  }
+  if (!bounced) {
+    return {
+      state: game.state,
+      row: player.row,
+      lane: player.lane,
+      courseId: game.course.id,
+      sweeperWipeout,
+    };
+  }
   await sleep(150);
-  await act("forward"); // row 13 checkpoint
+  const leftX = laneX(0);
+  const sweeperZ = 14 * 2.4;
+  const approachZ = 13 * 2.4;
+  const leftClear = () =>
+    !hazards().sweeper.hitsPlayer(leftX, approachZ) &&
+    !hazards().sweeper.hitsPlayer(leftX, sweeperZ);
 
-  // Deliberate sweeper wipeout for the cameras
+  // Stay on safe row 12, claim 13 only when the approach tile is clear,
+  // then take the intentional wipeout on the approach/sweeper.
   await act("left");
-  await until(() => !hz.sweeper.hitsPlayer(-2.4, 14 * 2.4));
-  await act("forward", 0); // stand on row 14 and take the hit
-  await until(() => player.motion === "tumble", 6000);
-  sweeperWipeout = player.motion === "tumble";
-  await until(() => game.state === "playing" && player.motion === "idle", 6000);
-  await sleep(1600); // respawn + invulnerability beat
+  await until(() => leftClear() && game.state === "playing", 8000);
+  emit("forward");
+  await until(
+    () => player.row === 13 || player.motion === "fall" || player.motion === "tumble",
+    4000,
+  );
+  await until(
+    () => player.motion === "tumble" || player.motion === "fall",
+    8000,
+  );
+  sweeperWipeout =
+    player.motion === "tumble" || player.motion === "fall";
+  await until(() => game.state === "playing" && player.motion === "idle", 8000);
+  await sleep(400);
 
-  // Cross the sweeper properly this time
-  await act("left");
-  await until(() => hz.sweeper.hitsPlayer(-2.4, 14 * 2.4));
-  await until(() => !hz.sweeper.hitsPlayer(-2.4, 14 * 2.4));
-  await act("forward", 0);
-  await act("forward"); // row 15
+  // Step back to row 12 — the arm no longer reaches here — then dash
+  // through the left lane on a clear window. Retry if a late clip hits.
+  let crossedSweeper = false;
+  for (let attempt = 0; attempt < 3 && !crossedSweeper; attempt++) {
+    await until(() => game.state === "playing" && player.motion === "idle", 8000);
+    if (game.state !== "playing") break;
+    while (player.row > 12 && player.motion === "idle") {
+      await act("back");
+    }
+    if (player.row < 12 && game.state === "playing") {
+      while (player.row > 9 && player.motion === "idle") await act("back");
+      while (player.row < 9 && player.motion === "idle") await act("forward");
+      while (player.lane !== 1 && player.motion === "idle") {
+        await act(player.lane < 1 ? "right" : "left");
+      }
+      await until(() => !hazards().balls.isUp(1));
+      await until(() => hazards().balls.isUp(1));
+      if (player.row === 9 && player.lane === 1) {
+        emit("forward");
+        await until(
+          () =>
+            player.row === 12 ||
+            player.motion === "fall" ||
+            game.state !== "playing",
+          6000,
+        );
+      }
+      if (player.row === 12 && game.state === "playing") {
+        await act("forward");
+      }
+      continue;
+    }
+    if (player.row < 12 || game.state !== "playing") continue;
+    while (player.lane > 0 && player.motion === "idle") {
+      await act("left");
+    }
+    await until(leftClear, 8000);
+    await sleep(60);
+    if (!leftClear() || player.row !== 12) continue;
+    emit("forward");
+    await waitSettled();
+    emit("forward");
+    await waitSettled();
+    emit("forward");
+    await waitSettled();
+    crossedSweeper = player.row >= 15 && game.state === "playing";
+  }
+  if (!crossedSweeper) {
+    return {
+      state: game.state,
+      row: player.row,
+      lane: player.lane,
+      courseId: game.course.id,
+      sweeperWipeout,
+    };
+  }
+
   await act("right"); // lane 1: safe from both pistons
   await act("forward"); // row 16
   await act("forward"); // row 17
 
   // Moving platform
-  await until(() => Math.abs(hz.platform.currentX() - laneX(1)) < 0.5);
+  await until(() => Math.abs(hazards().platform.currentX() - laneX(1)) < 0.5);
   emit("forward");
   await sleep(500);
   await until(
     () =>
-      [0, 1, 2].some((k) => Math.abs(hz.platform.currentX() - laneX(k)) < 0.4),
+      [0, 1, 2].some((k) => Math.abs(hazards().platform.currentX() - laneX(k)) < 0.4),
     8000,
   );
   await act("forward"); // step off to row 19
@@ -122,12 +228,14 @@ const outcome = await page.evaluate(async () => {
     state: game.state,
     row: player.row,
     lane: player.lane,
+    courseId: game.course.id,
     sweeperWipeout,
   };
-});
+}, { timeout: 120000 });
 const proofFailed =
   outcome.state !== "win" ||
   outcome.row !== 22 ||
+  outcome.courseId !== "main" ||
   !outcome.sweeperWipeout;
 await context.close();
 await browser.close();

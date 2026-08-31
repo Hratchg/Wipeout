@@ -1,7 +1,17 @@
 import { FreeCamera, Scene, Vector3 } from "@babylonjs/core";
 import type { Action, GameState } from "../types";
-import { COURSE, FINISH_ROW, LANE_W, laneX, leapLandingRow } from "./course";
-import type { BuiltWorld } from "./builder";
+import {
+  type Course,
+  type CourseId,
+  finishRowOf,
+  finishTimeBonus,
+  getCourse,
+  LANE_W,
+  laneX,
+  leapLandingRow,
+} from "./course";
+import type { ArenaAssets } from "./arenaAssets";
+import { rebuildPlayfield, type BuiltWorld } from "./builder";
 import { Player } from "./player";
 import { EffectsController } from "./effects";
 import { Ui } from "../ui/hud";
@@ -15,6 +25,8 @@ const INVULN_S = 1.5;
 
 export class Game {
   state: GameState = "title";
+  course: Course;
+  ui: Ui;
 
   private lives = START_LIVES;
   private score = 0;
@@ -35,18 +47,21 @@ export class Game {
   private scene: Scene;
   private world: BuiltWorld;
   private player: Player;
-  private ui: Ui;
+  private arenaAssets: ArenaAssets;
 
   constructor(
     scene: Scene,
     world: BuiltWorld,
     player: Player,
     ui: Ui,
+    arenaAssets: ArenaAssets,
   ) {
     this.scene = scene;
     this.world = world;
     this.player = player;
     this.ui = ui;
+    this.arenaAssets = arenaAssets;
+    this.course = getCourse("main");
     this.camera = new FreeCamera("cam", new Vector3(0, 7, -10), scene);
     this.camera.setTarget(new Vector3(0, 0.5, 4));
     this.cameraFollowPosition = this.camera.position.clone();
@@ -106,12 +121,16 @@ export class Game {
       else stopCv();
     } else if (item === "motion") {
       this.ui.setReducedMotion(!this.ui.isReducedMotion());
-    } else {
-      this.startRun();
+    } else if (item === "startQualifier") {
+      this.startRun("qualifier");
+    } else if (item === "startMain") {
+      this.startRun("main");
     }
   }
 
-  private startRun(): void {
+  startRun(id: CourseId): void {
+    this.course = getCourse(id);
+    rebuildPlayfield(this.world, this.scene, this.arenaAssets, this.course);
     this.lives = START_LIVES;
     this.score = 0;
     this.maxRow = 0;
@@ -123,9 +142,14 @@ export class Game {
     this.ui.setHearts(this.lives);
     this.ui.setScore(0);
     this.ui.setTimer(0);
+    this.ui.applyCourse(this.course);
     this.ui.showScreen("hud");
     this.player.respawn(1, 0);
     this.state = "playing";
+  }
+
+  debugSetElapsed(seconds: number): void {
+    this.startTime = this.time - seconds;
   }
 
   private handlePlayAction(action: Action): void {
@@ -140,7 +164,7 @@ export class Game {
       if (action === "forward") this.tryMove(nearestLane, p.row + 1, "step");
       else if (action === "back") this.tryMove(nearestLane, p.row - 1, "step");
       else if (action === "jump") {
-        const dest = leapLandingRow(nearestLane, p.row);
+        const dest = leapLandingRow(nearestLane, p.row, this.course.rows);
         if (dest !== null) this.tryMove(nearestLane, dest, "leap");
       }
       return;
@@ -162,7 +186,7 @@ export class Game {
         this.tryMove(p.lane, p.row - 1, "step");
         break;
       case "jump": {
-        const dest = leapLandingRow(p.lane, p.row);
+        const dest = leapLandingRow(p.lane, p.row, this.course.rows);
         if (dest !== null) this.tryMove(p.lane, dest, "leap");
         break;
       }
@@ -170,11 +194,12 @@ export class Game {
   }
 
   private tryMove(lane: number, row: number, kind: "step" | "leap"): void {
-    if (lane < 0 || lane > 2 || row < 0 || row > FINISH_ROW) return;
-    const spec = COURSE[row];
+    const finishRow = finishRowOf(this.course.rows);
+    if (lane < 0 || lane > 2 || row < 0 || row > finishRow) return;
+    const spec = this.course.rows[row];
     if (!spec) return;
     if (spec.kind === "solid" && spec.blocked?.[lane]) return; // pillar etc.
-    if (kind === "leap" && this.player.row === 20 && row === FINISH_ROW) {
+    if (kind === "leap" && row === finishRow) {
       this.ui.showFinalRun();
     }
     this.player.moveTo(lane, row, kind);
@@ -182,7 +207,7 @@ export class Game {
 
   private evaluateLanding(lane: number, row: number): void {
     if (this.state !== "playing") return;
-    const spec = COURSE[row];
+    const spec = this.course.rows[row];
     if (!spec) return;
     const hz = this.world.hazards;
 
@@ -239,17 +264,19 @@ export class Game {
     }
   }
 
-  private wipeout(direction: Vector3): void {
+  private wipeout(impulse: { linear: Vector3; angular: Vector3 }): void {
     this.effects.impact(this.player.root.position.clone());
-    this.player.startTumble(direction);
+    this.player.startTumble(impulse.linear, impulse.angular);
   }
 
   private loseLife(): void {
+    if (this.state !== "playing") return;
     this.lives -= 1;
     this.ui.setHearts(this.lives);
     if (this.lives <= 0) {
       this.state = "gameover";
       this.ui.setEndStats("gameover", `SCORE: ${this.score}`);
+      this.ui.setGameoverTitle("TOTAL WIPEOUT!");
       this.ui.showScreen("gameover");
       return;
     }
@@ -265,13 +292,23 @@ export class Game {
   private win(): void {
     this.effects.finish(this.player.root.position.clone());
     this.state = "win";
-    const timeBonus = Math.max(0, Math.round(240 - this.elapsed)) * 5;
-    this.score += 500 + timeBonus;
+    this.score += 500 + finishTimeBonus(this.course, this.elapsed);
     this.ui.setScore(this.score);
-    const m = Math.floor(this.elapsed / 60);
-    const s = (this.elapsed % 60).toFixed(1).padStart(4, "0");
-    this.ui.setEndStats("win", `TIME: ${m}:${s}   SCORE: ${this.score}`);
+    const countdown = this.course.rules.countdownSeconds;
+    const shown =
+      countdown == null ? this.elapsed : Math.max(0, countdown - this.elapsed);
+    const m = Math.floor(shown / 60);
+    const s = (shown % 60).toFixed(1).padStart(4, "0");
+    const label = countdown == null ? "TIME" : "TIME LEFT";
+    this.ui.setEndStats("win", `${label}: ${m}:${s}   SCORE: ${this.score}`);
     this.ui.showScreen("win");
+  }
+
+  private timeUp(): void {
+    this.state = "gameover";
+    this.ui.setEndStats("gameover", `SCORE: ${this.score}`);
+    this.ui.setGameoverTitle("TIME'S UP!");
+    this.ui.showScreen("gameover");
   }
 
   update(dt: number): void {
@@ -286,8 +323,17 @@ export class Game {
 
     if (this.state === "playing") {
       this.elapsed = this.time - this.startTime;
-      this.ui.setTimer(this.elapsed);
+      const countdown = this.course.rules.countdownSeconds;
+      if (countdown == null) {
+        this.ui.setTimer(this.elapsed);
+      } else {
+        const remaining = countdown - this.elapsed;
+        this.ui.setTimer(Math.max(0, remaining));
+        if (remaining <= 0 && this.state === "playing") this.timeUp();
+      }
+    }
 
+    if (this.state === "playing") {
       const p = this.player;
       if (p.motion === "riding") {
         p.root.position.x = hz.platform.currentX();
@@ -298,17 +344,21 @@ export class Game {
         const px = p.root.position.x;
         const pz = p.root.position.z;
         if (hz.sweeper.hitsPlayer(px, pz)) {
-          this.wipeout(hz.sweeper.knockDirection(px, pz));
+          this.wipeout(hz.sweeper.knockImpulse(px, pz));
         } else if (hz.pistons.hitsPlayer(px, pz)) {
-          this.wipeout(hz.pistons.knockDirection(px));
+          this.wipeout(hz.pistons.knockImpulse(px, pz));
         }
       }
     }
 
     // Camera follows the player with a soft lag, framed for a TV.
     const target = this.player.root.position;
-    const desired = new Vector3(target.x * 0.35, 7, target.z - 9);
-    const k = 1 - Math.exp(-dt * 4);
+    const desired = new Vector3(
+      target.x * 0.35,
+      7 + Math.max(target.y, 0) * 0.18,
+      target.z - 9,
+    );
+    const k = 1 - Math.exp(-dt * 3.2);
     this.cameraFollowPosition = Vector3.Lerp(
       this.cameraFollowPosition,
       desired,

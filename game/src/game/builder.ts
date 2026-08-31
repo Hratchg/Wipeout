@@ -14,7 +14,9 @@ import {
 } from "@babylonjs/core";
 import arenaDecalsUrl from "../assets/arena/arena_decals.png?url";
 import {
-  COURSE,
+  type Course,
+  finishRowOf,
+  getCourse,
   LANE_COUNT,
   LANE_W,
   laneX,
@@ -44,15 +46,19 @@ export interface CourseHazards {
   pistonRow: number;
   platform: MovingPlatform;
   platformRow: number;
+  dispose(): void;
 }
 
 export interface BuiltWorld {
   hazards: CourseHazards;
   shadows: ShadowGenerator;
   arena: ArenaEnvironment;
+  playfield: TransformNode;
 }
 
 function makeCheckerTexture(scene: Scene): DynamicTexture {
+  const existing = scene.getTextureByName("checker");
+  if (existing instanceof DynamicTexture) return existing;
   const size = 256;
   const tex = new DynamicTexture("checker", size, scene, false);
   const ctx = tex.getContext() as CanvasRenderingContext2D;
@@ -68,7 +74,28 @@ function makeCheckerTexture(scene: Scene): DynamicTexture {
   return tex;
 }
 
-export function buildWorld(scene: Scene, arenaAssets: ArenaAssets): BuiltWorld {
+function finishTopMaterial(scene: Scene): StandardMaterial {
+  const cached = scene.getMaterialByName("finish-top-mat");
+  if (cached instanceof StandardMaterial) return cached;
+  const finishTopMat = new StandardMaterial("finish-top-mat", scene);
+  finishTopMat.diffuseTexture = makeCheckerTexture(scene);
+  finishTopMat.specularColor = new Color3(0.1, 0.1, 0.1);
+  return finishTopMat;
+}
+
+function poleMaterial(scene: Scene): StandardMaterial {
+  const cached = scene.getMaterialByName("pole-mat");
+  if (cached instanceof StandardMaterial) return cached;
+  const poleMat = new StandardMaterial("pole-mat", scene);
+  poleMat.diffuseColor = new Color3(0.85, 0.85, 0.9);
+  return poleMat;
+}
+
+export function buildWorld(
+  scene: Scene,
+  arenaAssets: ArenaAssets,
+  course: Course = getCourse("main"),
+): BuiltWorld {
   const sun = new DirectionalLight("sun", new Vector3(-0.4, -1, 0.6), scene);
   sun.intensity = 1.22;
   sun.position = new Vector3(15, 30, -20);
@@ -79,7 +106,57 @@ export function buildWorld(scene: Scene, arenaAssets: ArenaAssets): BuiltWorld {
   shadows.blurKernel = 16;
 
   const arena = buildArenaEnvironment(scene, arenaAssets, shadows);
+  const { playfield, hazards } = buildPlayfield(
+    scene,
+    arenaAssets,
+    course,
+    shadows,
+  );
 
+  return { hazards, shadows, arena, playfield };
+}
+
+function removeShadowCastersUnder(
+  root: TransformNode,
+  shadows: ShadowGenerator,
+): void {
+  for (const mesh of root.getChildMeshes()) {
+    shadows.removeShadowCaster(mesh);
+  }
+}
+
+function pruneDisposedShadowCasters(shadows: ShadowGenerator): void {
+  const list = shadows.getShadowMap()?.renderList;
+  if (!list) return;
+  for (let i = list.length - 1; i >= 0; i--) {
+    const mesh = list[i];
+    if (!mesh || mesh.isDisposed()) {
+      list.splice(i, 1);
+    }
+  }
+}
+
+export function rebuildPlayfield(
+  world: BuiltWorld,
+  scene: Scene,
+  arenaAssets: ArenaAssets,
+  course: Course,
+): void {
+  removeShadowCastersUnder(world.playfield, world.shadows);
+  world.hazards.dispose();
+  world.playfield.dispose();
+  pruneDisposedShadowCasters(world.shadows);
+  const next = buildPlayfield(scene, arenaAssets, course, world.shadows);
+  world.playfield = next.playfield;
+  world.hazards = next.hazards;
+}
+
+function buildPlayfield(
+  scene: Scene,
+  arenaAssets: ArenaAssets,
+  course: Course,
+  shadows: ShadowGenerator,
+): { playfield: TransformNode; hazards: CourseHazards } {
   // Materials
   const tileMat = inflatableMaterial(
     scene,
@@ -99,9 +176,7 @@ export function buildWorld(scene: Scene, arenaAssets: ArenaAssets): BuiltWorld {
     new Color3(0.15, 0.75, 0.3),
   );
 
-  const finishTopMat = new StandardMaterial("finish-top-mat", scene);
-  finishTopMat.diffuseTexture = makeCheckerTexture(scene);
-  finishTopMat.specularColor = new Color3(0.1, 0.1, 0.1);
+  const finishTopMat = finishTopMaterial(scene);
   const courseDecalMat = decalMaterial(
     scene,
     "course-decal-material",
@@ -109,7 +184,7 @@ export function buildWorld(scene: Scene, arenaAssets: ArenaAssets): BuiltWorld {
   );
   courseDecalMat.zOffset = -2;
 
-  const courseRoot = new TransformNode("course", scene);
+  const playfield = new TransformNode("course-playfield", scene);
 
   // Template meshes, instanced per tile.
   const bodyTemplate = MeshBuilder.CreateBox(
@@ -118,6 +193,7 @@ export function buildWorld(scene: Scene, arenaAssets: ArenaAssets): BuiltWorld {
     scene,
   );
   bodyTemplate.material = tileMat;
+  bodyTemplate.parent = playfield;
   bodyTemplate.setEnabled(false);
 
   const makeTop = (name: string, mat: Material): Mesh => {
@@ -127,6 +203,7 @@ export function buildWorld(scene: Scene, arenaAssets: ArenaAssets): BuiltWorld {
       scene,
     );
     top.material = mat;
+    top.parent = playfield;
     top.setEnabled(false);
     return top;
   };
@@ -139,7 +216,7 @@ export function buildWorld(scene: Scene, arenaAssets: ArenaAssets): BuiltWorld {
     x: number,
     z: number,
   ): void => {
-    generated.parent = courseRoot;
+    generated.parent = playfield;
     generated.computeWorldMatrix(true);
     const bounds = generated.getHierarchyBoundingVectors(true);
     generated.position.x += x - (bounds.min.x + bounds.max.x) / 2;
@@ -164,7 +241,7 @@ export function buildWorld(scene: Scene, arenaAssets: ArenaAssets): BuiltWorld {
       { width, height: depth, updatable: true },
       scene,
     );
-    marker.parent = courseRoot;
+    marker.parent = playfield;
     marker.position.set(x, 0.025, z);
     marker.material = courseDecalMat;
     marker.isPickable = false;
@@ -179,13 +256,13 @@ export function buildWorld(scene: Scene, arenaAssets: ArenaAssets): BuiltWorld {
     }
   };
 
-  COURSE.forEach((spec, row) => {
+  course.rows.forEach((spec, row) => {
     if (spec.kind !== "solid") return;
     for (let lane = 0; lane < LANE_COUNT; lane++) {
       if (!spec.tiles?.[lane]) continue;
       const body = bodyTemplate.createInstance(`tile-${row}-${lane}`);
       body.position = new Vector3(laneX(lane), -TILE_H / 2, rowZ(row));
-      body.parent = courseRoot;
+      body.parent = playfield;
 
       const topSource = spec.finish
         ? finishTopTemplate
@@ -194,7 +271,7 @@ export function buildWorld(scene: Scene, arenaAssets: ArenaAssets): BuiltWorld {
           : topTemplate;
       const top = topSource.createInstance(`tile-top-${row}-${lane}`);
       top.position = new Vector3(laneX(lane), 0.04, rowZ(row));
-      top.parent = courseRoot;
+      top.parent = playfield;
 
       const generated = arenaAssets.instantiate(
         "platform",
@@ -223,7 +300,7 @@ export function buildWorld(scene: Scene, arenaAssets: ArenaAssets): BuiltWorld {
             0.94,
             [0.8, 0.48, 0.99, 0.7],
           );
-        } else if (COURSE[row + 1]?.kind === "gap") {
+        } else if (course.rows[row + 1]?.kind === "gap") {
           createCourseMarker(
             `warning-marker-${row}-${lane}`,
             laneX(lane),
@@ -247,18 +324,17 @@ export function buildWorld(scene: Scene, arenaAssets: ArenaAssets): BuiltWorld {
         WATER_Y / 2 - 0.5,
         rowZ(row),
       );
-      pillar.parent = courseRoot;
+      pillar.parent = playfield;
     }
   });
 
   // Finish flag
-  const finishRow = COURSE.length - 1;
+  const finishRow = finishRowOf(course.rows);
   const finishRoot = new TransformNode("finish-gate-root", scene);
-  finishRoot.parent = courseRoot;
+  finishRoot.parent = playfield;
   const proceduralFinish = new TransformNode("finish-gate-fallback", scene);
   proceduralFinish.parent = finishRoot;
-  const poleMat = new StandardMaterial("pole-mat", scene);
-  poleMat.diffuseColor = new Color3(0.85, 0.85, 0.9);
+  const poleMat = poleMaterial(scene);
   for (const side of [-1, 1]) {
     const pole = MeshBuilder.CreateCylinder(
       `finish-pole-${side}`,
@@ -323,7 +399,7 @@ export function buildWorld(scene: Scene, arenaAssets: ArenaAssets): BuiltWorld {
   let pistonRow = 0;
   let pistonLanes: Array<0 | 2> = [];
   let platformRow = 0;
-  COURSE.forEach((spec, row) => {
+  course.rows.forEach((spec, row) => {
     if (spec.kind === "balls") ballsRow = row;
     if (spec.sweeper) sweeperRow = row;
     if (spec.pistons) {
@@ -334,14 +410,27 @@ export function buildWorld(scene: Scene, arenaAssets: ArenaAssets): BuiltWorld {
   });
 
   const hazards: CourseHazards = {
-    balls: new BigBalls(scene, ballsRow, arenaAssets),
-    sweeper: new Sweeper(scene, sweeperRow, arenaAssets),
+    balls: new BigBalls(scene, ballsRow, arenaAssets, playfield),
+    sweeper: new Sweeper(scene, sweeperRow, arenaAssets, playfield),
     sweeperRow,
-    pistons: new PistonRow(scene, pistonRow, pistonLanes, arenaAssets),
+    pistons: new PistonRow(
+      scene,
+      pistonRow,
+      pistonLanes,
+      arenaAssets,
+      playfield,
+    ),
     pistonRow,
-    platform: new MovingPlatform(scene, platformRow, arenaAssets),
+    platform: new MovingPlatform(scene, platformRow, arenaAssets, playfield),
     platformRow,
+    dispose() {
+      this.balls.dispose();
+      this.sweeper.dispose();
+      this.pistons.dispose();
+      this.platform.dispose();
+      pruneDisposedShadowCasters(shadows);
+    },
   };
 
-  return { hazards, shadows, arena };
+  return { playfield, hazards };
 }

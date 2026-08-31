@@ -14,7 +14,7 @@ const chromePath = CHROME_PATHS.find((p) => fs.existsSync(p));
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const outputDir = path.resolve(
   scriptDir,
-  "../../.superpowers/sdd/2026-08-27-wipeout-visual-upgrade",
+  "../../.superpowers/sdd/2026-08-30-wipeout-qualifier",
 );
 const VIEWPORTS = [
   { width: 1280, height: 720 },
@@ -117,7 +117,7 @@ async function capture(page, viewport, state, controls) {
     viewport,
     state,
   );
-  const file = path.join(outputDir, `task-6-${size}-${state}.png`);
+  const file = path.join(outputDir, `task-4-${size}-${state}.png`);
   await page.screenshot({ path: file });
   return { state, file, measurements };
 }
@@ -172,7 +172,7 @@ try {
       const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
       const row = window.__wipeout.game.ui.menuRows.voice;
       const thicknesses = [];
-      for (let sample = 0; sample < 6; sample++) {
+      for (let sample = 0; sample < 20; sample++) {
         thicknesses.push(row.thickness);
         await sleep(80);
       }
@@ -186,17 +186,6 @@ try {
     assert.ok(
       focusVisual.maximumThickness - focusVisual.minimumThickness > 1,
       `Focused row border did not animate: ${JSON.stringify(focusVisual)}`,
-    );
-    captures.push(
-      await capture(page, viewport, "select", [
-        "broadcast-header-select",
-        "select-card",
-        "menu-row-remote",
-        "menu-row-voice",
-        "menu-row-camera",
-        "menu-row-motion",
-        "menu-row-start",
-      ]),
     );
     await page.evaluate(() => window.__wipeout.actionBus.emit("back", "remote"));
     assert.equal(
@@ -215,31 +204,75 @@ try {
 
     await page.evaluate(async () => {
       const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-      const { actionBus, game } = window.__wipeout;
+      const { actionBus } = window.__wipeout;
       for (let index = 0; index < 3; index++) {
         actionBus.emit("back", "remote");
         await sleep(40);
       }
-      if (game.ui.menuFocused() !== "start") {
-        throw new Error(`Expected start focus, received ${game.ui.menuFocused()}`);
-      }
+    });
+    captures.push(
+      await capture(page, viewport, "select", [
+        "broadcast-header-select",
+        "select-card",
+        "menu-row-remote",
+        "menu-row-voice",
+        "menu-row-camera",
+        "menu-row-motion",
+        "menu-row-startQualifier",
+        "menu-row-startMain",
+      ]),
+    );
+    assert.equal(
+      await page.evaluate(() => window.__wipeout.game.ui.menuFocused()),
+      "startQualifier",
+      "Three downs from Voice no longer land on START QUALIFIER",
+    );
+    const selectHeader = await page.evaluate(
+      () =>
+        window.__wipeout.game.ui.adt.getControlByName(
+          "broadcast-header-select-strap",
+        )?.text,
+    );
+    assert.equal(selectHeader, "CONTROL DESK");
+
+    const startedByMenu = await page.evaluate(async () => {
+      const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+      const { actionBus, game } = window.__wipeout;
       actionBus.emit("jump", "remote");
       await sleep(250);
+      return { state: game.state, courseId: game.course.id };
+    });
+    assert.deepEqual(
+      startedByMenu,
+      { state: "playing", courseId: "qualifier" },
+      "startQualifier jump must call startRun(\"qualifier\")",
+    );
+    await page.evaluate(() => {
+      const { game } = window.__wipeout;
+      game.startRun("qualifier");
       game.ui.setHearts(3);
-      game.ui.setTimer(83.4);
+      game.ui.setTimer(41.2);
       game.ui.setScore(1250);
       game.ui.voiceFeedback({ state: "listening", lastWord: "jump" });
       game.ui.cvFeedback({ state: "tracking" });
     });
-    assert.equal(
-      await page.evaluate(() => window.__wipeout.game.state),
-      "playing",
-      "Start row no longer begins a run",
-    );
+    const hudCopy = await page.evaluate(() => {
+      const ui = window.__wipeout.game.ui;
+      return {
+        timerLabel: ui.adt.getControlByName("hud-timer-label")?.text,
+        strap: ui.adt.getControlByName("broadcast-header-hud-strap")?.text,
+      };
+    });
+    assert.deepEqual(hudCopy, {
+      timerLabel: "TIME LEFT",
+      strap: "QUALIFIER LIVE",
+    });
     captures.push(
       await capture(page, viewport, "hud", [
+        "broadcast-header-hud",
         "hud-lives-panel",
         "hud-timer-panel",
+        "hud-timer-label",
         "hud-score-panel",
         "hud-input-panel",
       ]),
@@ -313,9 +346,26 @@ try {
     );
 
     await page.evaluate(() => {
+      const { game } = window.__wipeout;
+      game.startRun("qualifier");
+      game.debugSetElapsed(50.05);
+      game.update(0.016);
+    });
+    assert.equal(
+      await page.evaluate(() => window.__wipeout.game.state),
+      "gameover",
+      "Qualifier clock-out did not enter gameover",
+    );
+    const gameoverCopy = await page.evaluate(() => {
       const ui = window.__wipeout.game.ui;
-      ui.setEndStats("gameover", "SCORE: 1250");
-      ui.showScreen("gameover");
+      return {
+        title: ui.gameoverTitle?.text,
+        strap: ui.adt.getControlByName("broadcast-header-gameover-strap")?.text,
+      };
+    });
+    assert.deepEqual(gameoverCopy, {
+      title: "TIME'S UP!",
+      strap: "QUALIFIER LIVE",
     });
     captures.push(
       await capture(page, viewport, "gameover", [
@@ -327,8 +377,8 @@ try {
     const finalRunProof = await page.evaluate(async () => {
       const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
       const { actionBus, game, player } = window.__wipeout;
-      game.ui.showScreen("hud");
-      player.respawn(1, 20);
+      game.startRun("qualifier");
+      player.respawn(1, 12);
       actionBus.emit("jump", "remote");
       await sleep(25);
       const lowerThird = game.ui.checkpointLowerThird;
@@ -341,6 +391,7 @@ try {
       return {
         started,
         state: game.state,
+        strap: game.ui.adt.getControlByName("broadcast-header-win-strap")?.text,
         clearedBeforeOverlay:
           !lowerThird.isVisible &&
           game.ui.adt.getControlByName("lower-third-eyebrow")?.text === "",
@@ -353,6 +404,7 @@ try {
       eyebrow: "FINAL RUN",
     });
     assert.equal(finalRunProof.state, "win");
+    assert.equal(finalRunProof.strap, "QUALIFIER LIVE");
     assert.equal(
       finalRunProof.clearedBeforeOverlay,
       true,
@@ -405,7 +457,7 @@ try {
 }
 
 fs.writeFileSync(
-  path.join(outputDir, "task-6-ui-check-results.json"),
+  path.join(outputDir, "task-4-ui-check-results.json"),
   `${JSON.stringify(results, null, 2)}\n`,
 );
 console.log(

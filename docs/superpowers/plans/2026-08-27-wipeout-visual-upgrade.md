@@ -627,7 +627,7 @@ all assertions pass at both sizes.
 - `perf_check.mjs` reports average FPS, 95th percentile frame time, renderer,
   uncaught errors, and failed required asset requests at 1920×1080.
 
-- [ ] **Step 1: Write the performance gate**
+- [x] **Step 1: Write the performance gate**
 
 Record 20 seconds of frame deltas from the running game after assets load:
 
@@ -655,7 +655,7 @@ const metrics = await page.evaluate(async () => {
 
 Fail below 30 FPS or when p95 exceeds 50 ms.
 
-- [ ] **Step 2: Run all structural gates**
+- [x] **Step 2: Run all structural gates**
 
 Run:
 
@@ -686,7 +686,7 @@ times. Pass criterion: ten physical jumps produce ten on-screen jumps, with no
 extra actions during airborne or landing frames. Record misses/duplicates and
 camera distance; tune jump threshold/cooldown only from this session.
 
-- [ ] **Step 4: Record and watch the proof**
+- [x] **Step 4: Record and watch the proof**
 
 Run: `cd game && node scripts/proof_video.mjs`
 
@@ -701,7 +701,7 @@ ffmpeg -y -i /tmp/wipeout_proof/*.webm \
 Watch the complete MP4. Confirm it shows title, generated contestant, early
 course, Big Balls, intentional sweeper wipeout, moving platform, and win.
 
-- [ ] **Step 5: Update durable project status**
+- [x] **Step 5: Update durable project status**
 
 Update `README.md` with:
 
@@ -711,7 +711,7 @@ Update `README.md` with:
 - 1080p performance measurements.
 - Proof-video path and kiosk launch instructions.
 
-- [ ] **Step 6: Run final repository checks**
+- [x] **Step 6: Run final repository checks**
 
 Run:
 

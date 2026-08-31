@@ -225,12 +225,26 @@ def draw_preview(frame, kpts, mapper: GestureMapper, fps: float) -> None:
     )
 
 
-def inference_loop(args, broadcaster: Broadcaster, stop: threading.Event) -> None:
-    model = YOLO(args.model)
-    source = int(args.camera) if str(args.camera).isdigit() else args.camera
-    cap = cv2.VideoCapture(source)
+def open_capture(source: str | int) -> cv2.VideoCapture:
+    """Open the camera on the calling thread.
+
+    macOS only shows the camera-permission prompt from the main thread.
+    Opening here (before the inference worker starts) keeps that working.
+    """
+    cap = cv2.VideoCapture(int(source) if str(source).isdigit() else source)
     if not cap.isOpened():
-        raise SystemExit(f"Cannot open camera source {args.camera}")
+        raise SystemExit(f"Cannot open camera source {source}")
+    cap.read()
+    return cap
+
+
+def inference_loop(
+    args,
+    broadcaster: Broadcaster,
+    stop: threading.Event,
+    cap: cv2.VideoCapture,
+) -> None:
+    model = YOLO(args.model)
 
     mapper = GestureMapper()
     last_status = 0.0
@@ -268,9 +282,13 @@ def inference_loop(args, broadcaster: Broadcaster, stop: threading.Event) -> Non
         if args.preview:
             fps = len(frame_times) / 2.0
             draw_preview(frame, kpts, mapper, fps)
-            cv2.imshow("Wipeout input service", frame)
-            if cv2.waitKey(1) & 0xFF == ord("q"):
-                stop.set()
+            try:
+                cv2.imshow("Wipeout input service", frame)
+                if cv2.waitKey(1) & 0xFF == ord("q"):
+                    stop.set()
+            except cv2.error:
+                # macOS rejects imshow off the main thread; keep tracking.
+                args.preview = False
 
     cap.release()
     if args.preview:
@@ -315,8 +333,9 @@ def main() -> None:
 
     stop = threading.Event()
     broadcaster = Broadcaster()
+    cap = open_capture(args.camera)
     thread = threading.Thread(
-        target=inference_loop, args=(args, broadcaster, stop), daemon=True
+        target=inference_loop, args=(args, broadcaster, stop, cap), daemon=True
     )
     thread.start()
 
